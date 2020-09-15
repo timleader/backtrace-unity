@@ -14,11 +14,11 @@ namespace Backtrace.Unity.Runtime.Native.Android
     /// </summary>
     internal class NativeClient : INativeClient
     {
-        [DllImport("backtrace-crashpad")]
-        private static extern bool InitializeCrashpad(IntPtr submissionUrl, IntPtr databasePath, IntPtr handlerPath, IntPtr keys, IntPtr values);
+        [DllImport("backtrace-native")]
+        private static extern bool Initialize(IntPtr submissionUrl, IntPtr databasePath, IntPtr handlerPath, IntPtr keys, IntPtr values);
 
-        [DllImport("backtrace-crashpad")]
-        private static extern bool AddCrashpadAttribute(IntPtr key, IntPtr value);
+        [DllImport("backtrace-native")]
+        private static extern bool AddAttribute(IntPtr key, IntPtr value);
 
         private readonly BacktraceConfiguration _configuration;
         // Android native interface paths
@@ -55,7 +55,7 @@ namespace Backtrace.Unity.Runtime.Native.Android
 
         }
         /// <summary>
-        /// Start crashpad process to handle native Android crashes
+        /// Start native process to handle native Android crashes
         /// </summary>
 
         private void HandleNativeCrashes()
@@ -66,7 +66,7 @@ namespace Backtrace.Unity.Runtime.Native.Android
                 return;
             }
 
-            // crashpad is available only for API level 21+ 
+            // backtrace-native is available only for API level 21+ 
             // make sure we don't want ot start crashpad handler 
             // on the unsupported API
             using (var version = new AndroidJavaClass("android.os.Build$VERSION"))
@@ -74,7 +74,7 @@ namespace Backtrace.Unity.Runtime.Native.Android
                 int apiLevel = version.GetStatic<int>("SDK_INT");
                 if (apiLevel < 21)
                 {
-                    Debug.LogWarning("Crashpad integration status: Unsupported Android API level");
+                    Debug.LogWarning("Backtrace-native integration status: Unsupported Android API level");
                     return;
                 }
             }
@@ -82,7 +82,7 @@ namespace Backtrace.Unity.Runtime.Native.Android
             var crashpadHandlerPath = Directory.GetFiles(libDirectory, "libcrashpad_handler.so", SearchOption.AllDirectories).FirstOrDefault();
             if (string.IsNullOrEmpty(crashpadHandlerPath))
             {
-                Debug.LogWarning("Crashpad integration status: Cannot find crashpad library");
+                Debug.LogWarning("Backtrace-native integration status: Cannot find crashpad library");
                 return;
             }
             // get default built-in Backtrace-Unity attributes
@@ -92,7 +92,7 @@ namespace Backtrace.Unity.Runtime.Native.Android
             // reassign to captureNativeCrashes
             // to avoid doing anything on crashpad binary, when crashpad
             // isn't available
-            _captureNativeCrashes = InitializeCrashpad(
+            _captureNativeCrashes = Initialize(
                 AndroidJNI.NewStringUTF(minidumpUrl),
                 AndroidJNI.NewStringUTF(_configuration.CrashpadDatabasePath),
                 AndroidJNI.NewStringUTF(crashpadHandlerPath),
@@ -100,7 +100,7 @@ namespace Backtrace.Unity.Runtime.Native.Android
                 AndroidJNIHelper.ConvertToJNIArray(backtraceAttributes.Attributes.Values.ToArray()));
             if (!_captureNativeCrashes)
             {
-                Debug.LogWarning("Crashpad integration status: Cannot initialize Crashpad client");
+                Debug.LogWarning("Backtrace-native integration status: Cannot initialize Crashpad client");
             }
         }
 
@@ -161,25 +161,23 @@ namespace Backtrace.Unity.Runtime.Native.Android
         }
 
         /// <summary>
-        /// Set Backtrace-Android crashpad crash attributes
+        /// Set Backtrace-Unity native crash attributes
         /// </summary>
         /// <param name="key">Attribute key</param>
         /// <param name="value">Attribute value</param>
         public void SetAttribute(string key, string value)
         {
-            Debug.Log($"Adding attribute to crashpad");
             if (!_captureNativeCrashes || string.IsNullOrEmpty(key))
             {
                 return;
             }
-            Debug.Log($"Adding attribute to crashpad. {key} {value}");
-            // avoid null reference in crashpad source code
+            // avoid null reference in native code
             if (value == null)
             {
                 value = string.Empty;
             }
 
-            AddCrashpadAttribute(
+            AddAttribute(
                 AndroidJNI.NewStringUTF(key),
                 AndroidJNI.NewStringUTF(value));
         }

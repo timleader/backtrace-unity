@@ -1,5 +1,4 @@
 ﻿using Backtrace.Unity.Json;
-using Backtrace.Unity.Model;
 using NUnit.Framework;
 using System.Collections;
 using System.Collections.Generic;
@@ -7,6 +6,7 @@ using System.Linq;
 using System.Text.RegularExpressions;
 using UnityEngine;
 using UnityEngine.TestTools;
+
 
 namespace Backtrace.Unity.Tests.Runtime
 {
@@ -20,8 +20,7 @@ namespace Backtrace.Unity.Tests.Runtime
             var json = jObject.ToJson();
             Assert.IsNotEmpty(json);
 
-            var expectedResult = "{\r\n" +
-                "}\r\n";
+            var expectedResult = "{}";
             Assert.AreEqual(expectedResult, json);
             yield return null;
         }
@@ -171,10 +170,10 @@ namespace Backtrace.Unity.Tests.Runtime
             jObject["bar"] = string.Empty;
 
             var json = jObject.ToJson();
-            var expectedResult = "{\r\n" +
+            var expectedResult = "{" +
                "\"foo\": null," +
                "\"bar\": \"\"" +
-               "}\r\n";
+               "}";
             Assert.AreEqual(expectedResult, json);
             yield return null;
         }
@@ -228,6 +227,36 @@ namespace Backtrace.Unity.Tests.Runtime
 
             var json = jObject.ToJson();
             Assert.IsNotEmpty(json);
+            yield return null;
+        }
+
+
+        [UnityTest]
+        public IEnumerator TestCoroutineJson_ShouldGenerateTheSameJsonObject_JsonObjectIsTheSame()
+        {
+            var sampleObject = new SampleObject()
+            {
+                StringArray = new string[] { "foo", "bar" },
+                NumberArray = new int[] { 1, 2, 3, 4 }
+            };
+
+            var jObject = new BacktraceJObject();
+            jObject["StringArray"] = sampleObject.StringArray;
+            jObject["NumberArray"] = sampleObject.NumberArray;
+
+            var inner = new BacktraceJObject();
+            inner["foo"] = "bar";
+            jObject["inner"] = inner;
+
+            var json = jObject.ToJson();
+            Assert.IsNotEmpty(json);
+            var coroutineJson = string.Empty;
+            yield return jObject.ToJson((string result) =>
+            {
+                coroutineJson = result;
+            });
+            Assert.IsNotEmpty(coroutineJson);
+            Assert.AreEqual(json, coroutineJson.Trim());
             yield return null;
         }
     }

@@ -2,7 +2,9 @@
 using Backtrace.Unity.Model.Database;
 using Backtrace.Unity.Types;
 using System;
+using System.Collections;
 using System.Collections.Generic;
+using System.Diagnostics;
 
 namespace Backtrace.Unity.Interfaces
 {
@@ -19,6 +21,8 @@ namespace Backtrace.Unity.Interfaces
         /// </summary>
         /// <param name="backtraceDatabaseRecord">Database record</param>
         BacktraceDatabaseRecord Add(BacktraceDatabaseRecord backtraceDatabaseRecord);
+
+        IEnumerator Add(BacktraceData backtraceData, string json, Action<BacktraceDatabaseRecord> callback, Stopwatch stopWatch);
 
         /// <summary>
         /// Get first record or null

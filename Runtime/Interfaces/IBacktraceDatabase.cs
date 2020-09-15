@@ -3,6 +3,7 @@ using Backtrace.Unity.Model.Database;
 using Backtrace.Unity.Services;
 using Backtrace.Unity.Types;
 using System;
+using System.Collections;
 using System.Collections.Generic;
 
 namespace Backtrace.Unity.Interfaces
@@ -41,6 +42,8 @@ namespace Backtrace.Unity.Interfaces
         /// </summary>
         [Obsolete("Please use Add method with Backtrace data parameter instead")]
         BacktraceDatabaseRecord Add(BacktraceReport backtraceReport, Dictionary<string, string> attributes, MiniDumpType miniDumpType = MiniDumpType.Normal);
+
+        IEnumerator Add(BacktraceData data, string json, Action<BacktraceDatabaseRecord> callback, bool @lock = true, System.Diagnostics.Stopwatch stopwatch = null);
 
         /// <summary>
         /// Get all records stored in Database

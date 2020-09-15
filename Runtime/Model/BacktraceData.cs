@@ -1,7 +1,9 @@
 ﻿using Backtrace.Unity.Json;
 using Backtrace.Unity.Model.JsonData;
 using System;
+using System.Collections;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 
 namespace Backtrace.Unity.Model
@@ -111,13 +113,9 @@ namespace Backtrace.Unity.Model
             Attachments = Report.AttachmentPaths.Distinct().ToList();
         }
 
-        /// <summary>
-        /// Convert Backtrace data to JSON
-        /// </summary>
-        /// <returns>Backtrace Data JSON string</returns>
-        public string ToJson()
+        private BacktraceJObject GetJObject()
         {
-            var jObject = new BacktraceJObject()
+            return new BacktraceJObject()
             {
                 ["uuid"] = Uuid,
                 ["timestamp"] = Timestamp,
@@ -132,7 +130,19 @@ namespace Backtrace.Unity.Model
                 ["threads"] = ThreadData == null ? null : ThreadData.ToJson(),
                 ["sourceCode"] = SourceCode == null ? null : SourceCode.ToJson()
             };
-            return jObject.ToJson();
+        }
+        /// <summary>
+        /// Convert Backtrace data to JSON
+        /// </summary>
+        /// <returns>Backtrace Data JSON string</returns>
+        public string ToJson()
+        {
+            return GetJObject().ToJson();
+        }
+
+        public IEnumerator ToCoroutineJson(Action<string> callback, Stopwatch stopWatch)
+        {
+            yield return GetJObject().ToJson(callback, stopWatch);
         }
 
         /// <summary>

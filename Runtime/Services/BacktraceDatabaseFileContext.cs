@@ -1,9 +1,11 @@
 ﻿using Backtrace.Unity.Interfaces;
 using Backtrace.Unity.Model.Database;
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text;
 using System.Text.RegularExpressions;
 using UnityEngine;
 
@@ -16,15 +18,8 @@ namespace Backtrace.Unity.Services
     {
         private string[] _possibleDatabaseExtension = new string[] { ".dmp", ".json", ".jpg", ".log" };
 
-        /// <summary>
-        /// Maximum database size
-        /// </summary>
-        private readonly long _maxDatabaseSize;
 
-        /// <summary>
-        /// Maximum number of records in database
-        /// </summary>
-        private readonly uint _maxRecordNumber;
+        private readonly BacktraceDatabaseSettings _settings;
 
         /// <summary>
         /// Database directory info
@@ -35,14 +30,15 @@ namespace Backtrace.Unity.Services
         /// Regex for filter physical database records
         /// </summary>
         private const string RecordFilterRegex = "*-record.json";
+
         /// <summary>
         /// Initialize new BacktraceDatabaseFileContext instance
         /// </summary>
-        public BacktraceDatabaseFileContext(string databasePath, long maxDatabaseSize, uint maxRecordNumber)
+
+        public BacktraceDatabaseFileContext(BacktraceDatabaseSettings settings)
         {
-            _maxDatabaseSize = maxDatabaseSize;
-            _maxRecordNumber = maxRecordNumber;
-            _databaseDirectoryInfo = new DirectoryInfo(databasePath);
+            _settings = settings;
+            _databaseDirectoryInfo = new DirectoryInfo(_settings.DatabasePath);
         }
 
         /// <summary>
@@ -129,13 +125,13 @@ namespace Backtrace.Unity.Services
                 {
                     totalRecordFiles++;
 
-                    if (_maxRecordNumber > totalRecordFiles)
+                    if (_settings.MaxRecordCount > totalRecordFiles)
                     {
                         return false;
                     }
                 }
                 size += file.Length;
-                if (size > _maxDatabaseSize)
+                if (size > _settings.MaxDatabaseSize)
                 {
                     return false;
                 }
@@ -154,6 +150,69 @@ namespace Backtrace.Unity.Services
             {
                 var file = files[i];
                 file.Delete();
+            }
+        }
+
+        public IEnumerator Commit(BacktraceDatabaseRecord record)
+        {
+            if (record == null)
+            {
+                throw new ArgumentException("Record is null");
+            }
+            try
+            {
+                Save(record.BacktraceDataJson(), string.Format("{0}-attachment", record.Id));
+                Save(record.ToJson(), string.Format("{0}-record", record.Id));
+            }
+            catch (IOException io)
+            {
+                Debug.Log(string.Format("Received {0} while saving data to database.",
+                    "IOException"));
+                Debug.Log(string.Format("Message {0}", io.Message));
+            }
+            catch (Exception ex)
+            {
+                Debug.Log(string.Format("Received {0} while saving data to database.", ex.GetType().Name));
+                Debug.Log(string.Format("Message {0}", ex.Message));
+            }
+            yield return null;
+        }
+
+        private void Save(string json, string prefix)
+        {
+            byte[] file = Encoding.UTF8.GetBytes(json);
+            Write(file, prefix);
+        }
+
+        private void Write(byte[] data, string prefix)
+        {
+            string filename = string.Format("{0}.json", prefix);
+            string tempFilePath = Path.Combine(_settings.DatabasePath, string.Format("temp_{0}", filename));
+            SaveTemporaryFile(tempFilePath, data);
+            string destFilePath = Path.Combine(_settings.DatabasePath, filename);
+            SaveValidRecord(tempFilePath, destFilePath);
+        }
+
+        /// <summary>
+        /// Save valid diagnostic data from temporary file
+        /// </summary>
+        /// <param name="sourcePath">Temporary file path</param>
+        /// <param name="destinationPath">destination path</param>
+        private void SaveValidRecord(string sourcePath, string destinationPath)
+        {
+            File.Move(sourcePath, destinationPath);
+        }
+
+        /// <summary>
+        /// Save temporary file to hard drive.
+        /// </summary>
+        /// <param name="path">Path to temporary file</param>
+        /// <param name="file">Current file</param>
+        private void SaveTemporaryFile(string path, byte[] file)
+        {
+            using (var fs = new FileStream(path, FileMode.Create, FileAccess.Write))
+            {
+                fs.Write(file, 0, file.Length);
             }
         }
     }

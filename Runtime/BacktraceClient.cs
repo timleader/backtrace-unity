@@ -39,7 +39,7 @@ namespace Backtrace.Unity
             set
             {
                 _clientAttributes[index] = value;
-                if(_nativeClient != null)
+                if (_nativeClient != null)
                 {
                     _nativeClient.SetAttribute(index, value);
                 }
@@ -262,7 +262,6 @@ namespace Backtrace.Unity
             }
 
             Enabled = true;
-
             CaptureUnityMessages();
             _reportLimitWatcher = new ReportLimitWatcher(Convert.ToUInt32(Configuration.ReportPerMin));
 
@@ -303,9 +302,17 @@ namespace Backtrace.Unity
 
         private void Awake()
         {
-            Refresh();
+            if (Instance == null)
+            {
+                Refresh();
+            }
         }
 
+        private int _counter = 0;
+        private void Update()
+        {
+            _counter++;
+        }
         /// <summary>
         /// Change maximum number of reportrs sending per one minute
         /// </summary>
@@ -418,26 +425,52 @@ namespace Backtrace.Unity
                     yield break;
                 }
             }
-            BacktraceDatabaseRecord record = null;
-
-            if (Database != null)
+            Debug.Log($"Frames start: {_counter}");
+            if (EnablePerformanceStatistics)
             {
-                yield return new WaitForEndOfFrame();
+                stopWatch.Restart();
+            }
+         
+            string json = string.Empty;
+            yield return data.ToCoroutineJson((string coroutineJson) =>
+            {
+                json = coroutineJson;
                 if (EnablePerformanceStatistics)
                 {
-                    stopWatch.Restart();
+                    stopWatch.Stop();
+                    queryAttributes["performance.json"] = stopWatch.GetMicroseconds();
+                    Debug.Log($"Frames end: {_counter}");
                 }
-                record = Database.Add(data);
+            }, stopWatch);
+            if (string.IsNullOrEmpty(json))
+            {
+                Debug.LogWarning("Backtrace integration wasn't able to generate valid diagnostic JSON. ");
+                yield break;
+            }
+
+
+            BacktraceDatabaseRecord record = null;
+            if (Database != null)
+            {
+                yield return Database.Add(
+                    data: data,
+                    json: json,
+                    callback: (BacktraceDatabaseRecord dbRecord) =>
+                    {
+                        record = dbRecord;
+                        if (EnablePerformanceStatistics)
+                        {
+                            stopWatch.Stop();
+                            queryAttributes["performance.database"] = stopWatch.GetMicroseconds();
+                        }
+
+                    },
+                    stopwatch: stopWatch);
                 // handle situation when database refuse to store report.
                 if (record != null)
                 {
                     //Extend backtrace data with additional attachments from backtrace database
                     data = record.BacktraceData;
-                    if (EnablePerformanceStatistics)
-                    {
-                        stopWatch.Stop();
-                        queryAttributes["performance.database"] = stopWatch.GetMicroseconds();
-                    }
 
 
                     if (record.Duplicated)
@@ -445,24 +478,6 @@ namespace Backtrace.Unity
                         yield break;
                     }
                 }
-            }
-
-            yield return new WaitForEndOfFrame();
-            if (EnablePerformanceStatistics)
-            {
-                stopWatch.Restart();
-            }
-            // avoid serializing data twice
-            // if record is here we should try to send json data that are available in record
-            // otherwise we can still use BacktraceData.ToJson().            
-            string json = record != null
-                ? record.BacktraceDataJson()
-                : data.ToJson();
-
-            if (EnablePerformanceStatistics)
-            {
-                stopWatch.Stop();
-                queryAttributes["performance.json"] = stopWatch.GetMicroseconds();
             }
 
             //backward compatibility 

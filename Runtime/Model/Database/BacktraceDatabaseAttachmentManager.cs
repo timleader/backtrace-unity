@@ -1,9 +1,12 @@
 ﻿using Backtrace.Unity.Common;
 using Backtrace.Unity.Types;
 using System;
+using System.Collections;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using UnityEngine;
+
 
 namespace Backtrace.Unity.Model.Database
 {
@@ -26,9 +29,48 @@ namespace Backtrace.Unity.Model.Database
             return new List<string>()
             {
                 GetScreenshotPath(data),
-                GetUnityPlayerLogFile(data), 
+                GetUnityPlayerLogFile(data),
                 GetMinidumpPath(data)
             };
+        }
+
+        public IEnumerator GetReportAttachments(BacktraceData data, Stopwatch stopwatch, Action<List<string>> callback)
+        {            
+            // yield before grabbing a screenshot to avoid unity exceptions
+            yield return new WaitForEndOfFrame();
+            RestartDiagnosticTools(stopwatch);
+            var result = new List<string>();
+            result.Add(GetScreenshotPath(data));
+
+            // generate minidump
+            StopDiagnosticTools(stopwatch);
+            yield return new WaitForEndOfFrame();
+            RestartDiagnosticTools(stopwatch);
+            result.Add(GetMinidumpPath(data));
+
+            // generate unity log file
+            StopDiagnosticTools(stopwatch);
+            yield return new WaitForEndOfFrame();
+            RestartDiagnosticTools(stopwatch);
+            result.Add(GetUnityPlayerLogFile(data));
+
+            callback.Invoke(result);
+        }
+
+        private void StopDiagnosticTools(Stopwatch stopwatch)
+        {
+            if (stopwatch != null)
+            {
+                stopwatch.Stop();
+            }
+        }
+
+        private void RestartDiagnosticTools(Stopwatch stopwatch)
+        {
+            if (stopwatch != null)
+            {
+                stopwatch.Start();
+            }
         }
 
         private string GetMinidumpPath(BacktraceData backtraceData)

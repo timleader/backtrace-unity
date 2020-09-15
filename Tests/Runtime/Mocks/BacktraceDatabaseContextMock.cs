@@ -12,7 +12,7 @@ namespace Backtrace.Unity.Tests.Runtime
             _settings = settings;
         }
 
-        protected override BacktraceDatabaseRecord ConvertToRecord(BacktraceData backtraceData, string hash)
+        protected override BacktraceDatabaseRecord ConvertToRecord(BacktraceData backtraceData, string hash, string json = "")
         {
             //create new record and return it to AVOID storing data on hard drive
             return new BacktraceDatabaseRecord(backtraceData, _settings.DatabasePath)

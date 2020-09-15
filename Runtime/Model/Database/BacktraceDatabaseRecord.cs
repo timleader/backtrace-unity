@@ -103,6 +103,15 @@ namespace Backtrace.Unity.Model.Database
             return File.ReadAllText(DiagnosticDataPath);
         }
 
+        public void SetDiagnosticJson(string json)
+        {
+            if (string.IsNullOrEmpty(json))
+            {
+                return;
+            }
+            _diagnosticDataJson = json;
+        }
+
         /// <summary>
         /// Get valid BacktraceData from current record
         /// </summary>
@@ -173,7 +182,10 @@ namespace Backtrace.Unity.Model.Database
         {
             try
             {
-                _diagnosticDataJson = Record.ToJson();
+                if (string.IsNullOrEmpty(_diagnosticDataJson))
+                {
+                    _diagnosticDataJson = Record.ToJson();
+                }
                 DiagnosticDataPath = Save(_diagnosticDataJson, string.Format("{0}-attachment", Id));
 
                 if (Attachments != null && Attachments.Any())
@@ -187,13 +199,12 @@ namespace Backtrace.Unity.Model.Database
                     }
                 }
                 //save record
-                RecordPath = Path.Combine(_path, string.Format("{0}-record.json", Id));
                 //check current record size
                 var json = ToJson();
                 byte[] file = Encoding.UTF8.GetBytes(json);
                 //add record size
                 Size += file.Length;
-                RecordWriter.Write(json, string.Format("{0}-record", Id));
+                RecordPath = RecordWriter.Write(json, string.Format("{0}-record", Id));
                 return true;
             }
             catch (IOException io)

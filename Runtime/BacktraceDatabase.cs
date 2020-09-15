@@ -5,6 +5,7 @@ using Backtrace.Unity.Model.Database;
 using Backtrace.Unity.Services;
 using Backtrace.Unity.Types;
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using UnityEngine;
@@ -21,7 +22,7 @@ namespace Backtrace.Unity
 
         public BacktraceConfiguration Configuration;
 
-        internal static float LastFrameTime = 0;
+        internal static float LastFrameTime { get; private set; }
 
         /// <summary>
         /// Internal database path 
@@ -30,22 +31,12 @@ namespace Backtrace.Unity
 
 
         /// <summary>
-        /// Backtrace database instance.
-        /// </summary>
-        private static BacktraceDatabase _instance;
-
-        /// <summary>
         ///  Backtrace database instance accessor. Please use this property to access
         ///  BacktraceDatabase instance from other scene. This property will return value only
         ///  when you mark option "DestroyOnLoad" to false.
         /// </summary>
-        public static BacktraceDatabase Instance
-        {
-            get
-            {
-                return _instance;
-            }
-        }
+        public static BacktraceDatabase Instance { get; private set; }
+
 
         /// <summary>
         /// Backtrace Database deduplication strategy
@@ -139,7 +130,7 @@ namespace Backtrace.Unity
             LastFrameTime = Time.time;
             //Setup database context
             BacktraceDatabaseContext = new BacktraceDatabaseContext(DatabaseSettings);
-            BacktraceDatabaseFileContext = new BacktraceDatabaseFileContext(DatabaseSettings.DatabasePath, DatabaseSettings.MaxDatabaseSize, DatabaseSettings.MaxRecordCount);
+            BacktraceDatabaseFileContext = new BacktraceDatabaseFileContext(DatabaseSettings);
             BacktraceApi = new BacktraceApi(Configuration.ToCredentials());
             _reportLimitWatcher = new ReportLimitWatcher(Convert.ToUInt32(Configuration.ReportPerMin));
 
@@ -158,7 +149,10 @@ namespace Backtrace.Unity
         /// </summary>
         private void Awake()
         {
-            Reload();
+            if (Instance == null)
+            {
+                Reload();
+            }
         }
 
         /// <summary>
@@ -266,25 +260,43 @@ namespace Backtrace.Unity
             return record;
         }
 
+        public IEnumerator Add(BacktraceData data, string json, Action<BacktraceDatabaseRecord> callback, bool @lock = true, System.Diagnostics.Stopwatch stopwatch = null)
+        {
+            if (data == null || !Enable || callback == null)
+            {
+                yield break;
+            }
+            stopwatch.Restart();
+
+            //remove old reports (if database is full)
+            //and check database health state
+            var validationResult = ValidateDatabaseSize();
+            if (!validationResult)
+            {
+                if (stopwatch != null)
+                {
+                    stopwatch.Stop();
+                }
+
+                callback.Invoke(null);
+                yield break;
+            }
+            stopwatch.Stop();
+            yield return BacktraceDatabaseContext.Add(data, json, (BacktraceDatabaseRecord record) =>
+            {
+                callback.Invoke(record);
+            }, stopwatch);
+
+        }
+
         /// <summary>
         /// Add new report to BacktraceDatabase
         /// </summary>
         [Obsolete("Please use Add method with Backtrace data parameter instead")]
         public BacktraceDatabaseRecord Add(BacktraceReport backtraceReport, Dictionary<string, string> attributes, MiniDumpType miniDumpType = MiniDumpType.None)
         {
-            if (!Enable || backtraceReport == null)
-            {
-                return null;
-            }
-            //remove old reports (if database is full)
-            //and check database health state
-            var validationResult = ValidateDatabaseSize();
-            if (!validationResult)
-            {
-                return null;
-            }
             var data = backtraceReport.ToBacktraceData(attributes, Configuration.GameObjectDepth);
-            return BacktraceDatabaseContext.Add(data);
+            return Add(data);
         }
 
 
@@ -444,7 +456,7 @@ namespace Backtrace.Unity
                 return;
             }
             DontDestroyOnLoad(gameObject);
-            _instance = this;
+            Instance = this;
         }
 
         /// <summary>

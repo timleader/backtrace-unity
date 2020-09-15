@@ -1,6 +1,8 @@
-﻿using System;
+﻿using Backtrace.Unity.Model;
+using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Globalization;
 using System.Linq;
 using System.Text;
@@ -47,15 +49,67 @@ namespace Backtrace.Unity.Json
         public string ToJson()
         {
             var stringBuilder = new StringBuilder();
-            stringBuilder.AppendLine("{");
+            stringBuilder.Append("{");
 
-            var lines = Source.Select(entry => string.Format("\"{0}\": {1}", EscapeString(entry.Key), ConvertValue(entry.Value)));
+            var lines = Source.Select(entry => string.Format("\"{0}\":{1}", EscapeString(entry.Key), ConvertAtomicValue(entry.Value)));
             var content = string.Join(",", lines);
 
             stringBuilder.Append(content);
-            stringBuilder.AppendLine("}");
+            stringBuilder.Append("}");
 
             return stringBuilder.ToString();
+        }
+
+        public IEnumerator ToJson(Action<string> callback, Stopwatch stopwatch = null)
+        {
+            if (callback == null)
+            {
+                throw new ArgumentException("callback");
+            }
+            if (stopwatch == null)
+            {
+                stopwatch = new Stopwatch();
+            }
+            var coroutineStringBuilder = new CoroutineStringBuilder();
+            yield return AppendJsonToBuilder(coroutineStringBuilder, stopwatch);
+            callback.Invoke(coroutineStringBuilder.ToString());
+        }
+
+        private IEnumerator AppendJsonToBuilder(CoroutineStringBuilder coroutineStringBuilder, Stopwatch stopwatch)
+        {
+            stopwatch.Start();
+            coroutineStringBuilder.Append("{");
+
+            for (int jsonEntryIndex = 0; jsonEntryIndex < Source.Count; jsonEntryIndex++)
+            {
+                var entry = Source.ElementAt(jsonEntryIndex);
+                coroutineStringBuilder.AppendFormat("\"{0}\":", EscapeString(entry.Key));
+                if (entry.Value is BacktraceJObject)
+                {
+                    stopwatch.Stop();
+                    yield return (entry.Value as BacktraceJObject).AppendJsonToBuilder(coroutineStringBuilder, stopwatch);
+                    stopwatch.Start();
+                }
+                else
+                {
+                    coroutineStringBuilder.Append(ConvertAtomicValue(entry.Value));
+                }
+                if (coroutineStringBuilder.ShouldYield())
+                {
+                    stopwatch.Stop();
+                    yield return coroutineStringBuilder.WaitForFrame();
+                    stopwatch.Start();
+                }
+
+                // avoid adding ',' to the last json entry
+                if (jsonEntryIndex != Source.Count - 1)
+                {
+                    coroutineStringBuilder.Append(",");
+                }
+            }
+
+            coroutineStringBuilder.Append("}");
+            stopwatch.Stop();
         }
 
         /// <summary>
@@ -107,7 +161,7 @@ namespace Backtrace.Unity.Json
         /// </summary>
         /// <param name="value">object value</param>
         /// <returns>json value</returns>
-        private string ConvertValue(object value)
+        private string ConvertAtomicValue(object value)
         {
             if (value == null)
             {
@@ -151,7 +205,7 @@ namespace Backtrace.Unity.Json
                     {
                         builder.Append(',');
                     }
-                    builder.Append(ConvertValue(item));
+                    builder.Append(ConvertAtomicValue(item));
                     index++;
                 }
                 builder.Append(']');
@@ -172,7 +226,6 @@ namespace Backtrace.Unity.Json
 
                 return "null";
             }
-
         }
     }
 }

@@ -4,7 +4,9 @@ using Backtrace.Unity.Model;
 using Backtrace.Unity.Model.Database;
 using Backtrace.Unity.Types;
 using System;
+using System.Collections;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 
@@ -147,19 +149,76 @@ namespace Backtrace.Unity.Services
             return Add(record);
         }
 
+
+        public IEnumerator Add(BacktraceData backtraceData, string json, Action<BacktraceDatabaseRecord> callback, Stopwatch stopWatch)
+        {
+            if (backtraceData == null)
+            {
+                throw new NullReferenceException("backtraceData");
+            }
+            if (stopWatch != null)
+            {
+                stopWatch.Start();
+            }
+
+            string hash = GetHash(backtraceData);
+            if (!string.IsNullOrEmpty(hash))
+            {
+                var existRecord = BatchRetry.SelectMany(n => n.Value)
+                    .FirstOrDefault(n => n.Hash == hash);
+
+                if (existRecord != null)
+                {
+                    existRecord.Locked = true;
+                    existRecord.Increment();
+                    TotalRecords++;
+                    if (stopWatch != null)
+                    {
+                        stopWatch.Stop();
+                    }
+
+                }
+            }
+            //add built-in attachments
+            if (stopWatch != null)
+            {
+                stopWatch.Stop();
+            }
+            yield return _attachmentManager.GetReportAttachments(backtraceData, stopWatch, (attachments) =>
+               {
+                   foreach (var attachment in attachments)
+                   {
+                       if (!string.IsNullOrEmpty(attachment))
+                       {
+                           backtraceData.Report.AttachmentPaths.Add(attachment);
+                           backtraceData.Attachments.Add(attachment);
+                       }
+                   }
+               });
+            if (stopWatch != null)
+            {
+                stopWatch.Start();
+            }
+
+            var record = ConvertToRecord(backtraceData, hash, json);
+            //add record to database context
+            callback.Invoke(Add(record));
+        }
+
         /// <summary>
         /// Convert Backtrace data to Backtrace record and save it.
         /// </summary>
         /// <param name="backtraceData">Backtrace data</param>
         /// <param name="hash">deduplicaiton hash</param>
         /// <returns></returns>
-        protected virtual BacktraceDatabaseRecord ConvertToRecord(BacktraceData backtraceData, string hash)
+        protected virtual BacktraceDatabaseRecord ConvertToRecord(BacktraceData backtraceData, string hash, string json = "")
         {
             //create new record and save it on hard drive
             var record = new BacktraceDatabaseRecord(backtraceData, _path)
             {
                 Hash = hash
             };
+            record.SetDiagnosticJson(json);
             record.Save();
             return record;
         }
@@ -167,22 +226,22 @@ namespace Backtrace.Unity.Services
         /// <summary>
         /// Add existing record to database
         /// </summary>
-        /// <param name="backtraceRecord">Database record</param>
-        public BacktraceDatabaseRecord Add(BacktraceDatabaseRecord backtraceRecord)
+        /// <param name="backtraceDatabaseRecord">Database record</param>
+        public BacktraceDatabaseRecord Add(BacktraceDatabaseRecord backtraceDatabaseRecord)
         {
-            if (backtraceRecord == null)
+            if (backtraceDatabaseRecord == null)
             {
                 throw new NullReferenceException("BacktraceDatabaseRecord");
             }
             //lock record, because Add method returns record
-            backtraceRecord.Locked = true;
+            backtraceDatabaseRecord.Locked = true;
             //increment total size of database
-            TotalSize += backtraceRecord.Size;
+            TotalSize += backtraceDatabaseRecord.Size;
             //add record to first batch
-            BatchRetry[0].Add(backtraceRecord);
+            BatchRetry[0].Add(backtraceDatabaseRecord);
             //increment total records
             TotalRecords++;
-            return backtraceRecord;
+            return backtraceDatabaseRecord;
         }
 
         /// <summary>
@@ -312,10 +371,10 @@ namespace Backtrace.Unity.Services
                         TotalRecords--;
                     }
                     //decrement total size of database
-                    System.Diagnostics.Debug.WriteLine(string.Format(
+                    Debug.WriteLine(string.Format(
                         "[RemoveMaxRetries]::BeforeDelete Total size: {0}. Record Size: {1} ", TotalSize, value.Size));
                     TotalSize -= value.Size;
-                    System.Diagnostics.Debug.WriteLine(string.Format("[RemoveMaxRetries]::AfterDelete Total size: {0} ",
+                    Debug.WriteLine(string.Format("[RemoveMaxRetries]::AfterDelete Total size: {0} ",
                         TotalSize));
                 }
             }
