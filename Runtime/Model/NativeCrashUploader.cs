@@ -2,6 +2,7 @@ using Backtrace.Unity.Interfaces;
 using Backtrace.Unity.Types;
 using System;
 using System.Collections;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using UnityEngine;
@@ -27,7 +28,7 @@ namespace Backtrace.Unity.Model
             _backtraceApi = backtraceApi;
         }
 
-        public IEnumerator SendUnhandledGameCrashesOnGameStartup()
+        public IEnumerator SendUnhandledGameCrashesOnGameStartup(IList<string> previous_attachments)
         {
             if (string.IsNullOrEmpty(nativeCrashesDir) || !Directory.Exists(nativeCrashesDir))
             {
@@ -38,7 +39,6 @@ namespace Backtrace.Unity.Model
                 var crashDirs = Directory.GetDirectories(nativeCrashesDir);
                 foreach (var crashDir in crashDirs)
                 {
-
                     var crashDirFullPath = Path.Combine(nativeCrashesDir, crashDir);
                     var crashFiles = Directory.GetFiles(crashDirFullPath);
 
@@ -47,12 +47,16 @@ namespace Backtrace.Unity.Model
                     {
                         continue;
                     }
+                    
                     var minidumpPath = crashFiles.FirstOrDefault(n => n.EndsWith("crash.dmp"));
                     if (string.IsNullOrEmpty(minidumpPath))
                     {
                         continue;
                     }
-                    var attachments = crashFiles.Where(n => n != minidumpPath);
+
+                    var attachments = new List<string>(previous_attachments);
+                    attachments.AddRange(crashFiles.Where(n => n != minidumpPath));
+                    
                     yield return _backtraceApi.SendMinidump(minidumpPath, attachments, (BacktraceResult result) =>
                     {
                         if (result != null && result.Status == BacktraceResultStatus.Ok)

@@ -396,7 +396,7 @@ namespace Backtrace.Unity
             {
                 var nativeCrashUplaoder = new NativeCrashUploader();
                 nativeCrashUplaoder.SetBacktraceApi(BacktraceApi);
-                StartCoroutine(nativeCrashUplaoder.SendUnhandledGameCrashesOnGameStartup());
+                StartCoroutine(nativeCrashUplaoder.SendUnhandledGameCrashesOnGameStartup(_previousSessionAttachments));
             }
         }
 
@@ -438,6 +438,17 @@ namespace Backtrace.Unity
             _reportLimitWatcher.SetClientReportLimit(reportPerMin);
         }
 
+        private readonly List<string> _previousSessionAttachments = new List<string> { };
+
+        /// <summary>
+        /// 
+        /// </summary>
+        public void SetPreviousSessionAttachments(IEnumerable<string> attachments)
+        {
+            _previousSessionAttachments.Clear();
+            _previousSessionAttachments.AddRange(attachments);
+        }
+        
         /// <summary>
         /// Send a message report to Backtrace API
         /// </summary>
